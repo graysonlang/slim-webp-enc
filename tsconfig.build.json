@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // Declarations only: the runnable JS ships as esbuild's single-file
+    // dist/index.js bundle. Emitting .js here would clobber that bundle with
+    // an unbundled multi-file build (see scripts/dist.mjs).
+    "emitDeclarationOnly": true
+  },
+  "include": ["src/**/*.ts"]
+}

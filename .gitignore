@@ -1,0 +1,7 @@
+.DS_Store
+/dist/
+/www/
+node_modules/
+/corpus/
+/out/
+/vendor/

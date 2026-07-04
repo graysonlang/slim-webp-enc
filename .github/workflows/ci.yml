@@ -1,0 +1,22 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: sudo apt-get update && sudo apt-get install -y webp
+      - run: npm ci
+      - run: npm run typecheck
+      - run: node harness/booltest.ts
+      - run: node harness/vp8ltest.ts
+      - run: node harness/run.ts --encoder=slim
+      - run: node harness/alpha-roundtrip.ts
+      - run: npm run size # 55 KB minified hard gate

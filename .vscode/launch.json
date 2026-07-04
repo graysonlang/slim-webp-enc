@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug in Chrome",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:8000",
+      "webRoot": "${workspaceFolder}",
+      "sourceMapPathOverrides": { "../*": "${workspaceFolder}/*" },
+      "preLaunchTask": "debug",
+      "postDebugTask": "Kill debug server",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/dist/*.js"]
+    },
+    {
+      "name": "Debug harness (node)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/harness/run.ts",
+      "args": ["--encoder=slim"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "name": "@graysonlang/slim-webp-enc",
+  "version": "1.0.0",
+  "description": "Pure-TypeScript lossy WebP thumbnail encoder with alpha support",
+  "keywords": [
+    "webp",
+    "webp-encoder",
+    "encoder",
+    "image",
+    "compression",
+    "thumbnail",
+    "alpha",
+    "transparency",
+    "canvas",
+    "safari",
+    "webkit",
+    "vp8",
+    "browser",
+    "typescript",
+    "zero-dependencies"
+  ],
+  "homepage": "https://github.com/graysonlang/slim-webp-enc#readme",
+  "bugs": {
+    "url": "https://github.com/graysonlang/slim-webp-enc/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/graysonlang/slim-webp-enc.git"
+  },
+  "license": "MIT",
+  "author": "Grayson Lang",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node ./scripts/build.mjs --minify",
+    "serve": "node ./scripts/build.mjs --sourcemap --watch --serve --debug-port=9222",
+    "dev": "npm run serve -- --proxy --launch",
+    "vscode:build": "npm run build -- --vscode",
+    "vscode:debug": "npm run serve -- --vscode",
+    "dist": "node ./scripts/dist.mjs",
+    "prepare": "npm run dist",
+    "corpus": "node harness/corpus.ts",
+    "harness": "node harness/run.ts",
+    "compare": "node harness/compare.ts",
+    "typecheck": "tsc --noEmit",
+    "size": "node harness/size-gate.ts"
+  },
+  "devDependencies": {
+    "@graysonlang/esp": "^1.6.2",
+    "@jsquash/webp": "^1.5.0",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.28.1",
+    "sharp": "^0.34.0",
+    "typescript": "^5.8.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}

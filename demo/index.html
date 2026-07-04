@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>slim-webp-enc — comparison</title>
+  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=" />
+  <style>
+    :root {
+      --bg: #111;
+      --panel: #181818;
+      --line: #2a2a2a;
+      --fg: #ddd;
+      --muted: #888;
+      --accent: #6cf;
+      --slim: #e8912a;
+      --cell: 160px;
+      --checker-dark: #111 0px 0px / 16px url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2" fill="white" fill-opacity="0.025"><rect width="1" height="1" /><rect x="1" y="1" width="1" height="1" /></svg>');
+      --checker-light: #fff 0px 0px / 16px url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2" fill="black" fill-opacity="0.05"><rect width="1" height="1" /><rect x="1" y="1" width="1" height="1" /></svg>');
+      --checker: var(--checker-dark);
+    }
+    body.checker-light { --checker: var(--checker-light); }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 32px;
+    }
+    header { margin-bottom: 20px; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    p.lede { color: var(--muted); max-width: 88ch; }
+    p.lede code { color: var(--accent); }
+    p.lede b { color: var(--fg); }
+
+    #dropzone {
+      border: 1px dashed var(--line);
+      border-radius: 10px;
+      overflow: auto;
+    }
+    #dropzone.dragover { border-color: var(--accent); background: #141a1f; }
+
+    table { border-collapse: separate; border-spacing: 0; width: 100%; }
+    thead th {
+      position: sticky; top: 0;
+      background: var(--panel);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      text-align: left;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    tbody td {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    tbody tr:hover { background: #151515; }
+
+    thead th:nth-child(2) {
+      color: var(--slim);
+      border-top: 2px solid var(--slim);
+      border-left: 2px solid var(--slim);
+      border-right: 2px solid var(--slim);
+      border-top-left-radius: 10px;
+      border-top-right-radius: 10px;
+    }
+    tbody td:nth-child(2) {
+      border-left: 2px solid var(--slim);
+      border-right: 2px solid var(--slim);
+      background: rgba(232, 145, 42, 0.05);
+    }
+    tbody tr:last-child td:nth-child(2) {
+      border-bottom: 2px solid var(--slim);
+      border-bottom-left-radius: 10px;
+      border-bottom-right-radius: 10px;
+    }
+
+    .cell { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+    .cell canvas, .cell img {
+      max-width: var(--cell);
+      max-height: var(--cell);
+      background: var(--checker);
+      display: block;
+      image-rendering: auto;
+    }
+    .cell .meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .cell .meta b { color: var(--fg); font-weight: 600; }
+    .cell .perf { width: var(--cell); }
+    .cell .perf-track {
+      height: 5px; background: #2a2a2a; border-radius: 3px; overflow: hidden;
+    }
+    .cell .perf-fill {
+      height: 100%; min-width: 1px; border-radius: 3px;
+      background: linear-gradient(90deg, #4a9fd4, #9df);
+    }
+    .cell .perf-label { font-size: 10px; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+    .label { color: var(--fg); font-size: 12px; }
+    .badge {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #d9a441; border: 1px solid #5a4a22; border-radius: 999px; padding: 1px 7px;
+    }
+    footer { color: var(--muted); font-size: 12px; margin-top: 20px; }
+
+    .controls {
+      display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+      padding: 14px 16px; margin: 0 0 20px;
+    }
+    .control { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+    .control b { color: var(--fg); font-variant-numeric: tabular-nums; min-width: 3ch; }
+    .control input[type=range] { accent-color: var(--slim); width: 160px; }
+    .control select {
+      font: inherit; font-size: 12px; color: var(--fg); background: #1d1d1d;
+      border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; cursor: pointer;
+    }
+    .controls button, .toggle {
+      font: inherit; font-size: 12px; color: var(--fg); background: #262626;
+      border: 1px solid var(--line); border-radius: 7px; padding: 5px 12px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .controls button:hover, .toggle:hover { border-color: var(--accent); }
+    .toggle .swatch {
+      width: 14px; height: 14px; border-radius: 3px;
+      border: 1px solid var(--line); background: var(--checker);
+    }
+    .controls .hint { font-size: 11px; color: var(--muted); }
+  </style>
+  <script src="./main.js" type="module"></script>
+</head>
+<body>
+  <header>
+    <h1>slim-webp-enc — side-by-side comparison</h1>
+    <p class="lede">
+      <b>slim-webp-enc</b> is a pure-TypeScript lossy WebP encoder with semi-lossy alpha, built for
+      thumbnail generation on browsers without native WebP encoding (WebKit/Safari).
+      Each row encodes the same image with <b>slim-webp-enc</b>, the browser's native
+      <code>canvas.toBlob('image/webp')</code> (absent on WebKit), and PNG as a baseline.
+      All previews are the browser's own decode of the encoded bytes.
+    </p>
+    <p class="lede">
+      Drag/drop or <code>Upload</code> images to compare with your own thumbnails.
+    </p>
+  </header>
+
+  <div class="controls">
+    <span class="control">quality <input id="quality" type="range" min="0" max="100" step="1" value="80"> <b id="quality-label">80</b></span>
+    <span class="control">alpha levels
+      <select id="alpha-levels">
+        <option value="8">8</option>
+        <option value="16" selected>16</option>
+        <option value="32">32</option>
+      </select>
+    </span>
+    <span class="control"><label><input id="alpha-dither" type="checkbox" checked> alpha dither</label></span>
+    <span class="control"><label><input id="alpha-adaptive" type="checkbox" checked> adaptive levels</label></span>
+    <button id="checker-toggle" type="button" class="toggle">
+      <span class="swatch"></span>Checkerboard: <b id="checker-label">dark</b>
+    </button>
+    <button id="upload-btn" type="button">Upload</button>
+    <span class="hint">PSNR is measured on the decode composited over a checkerboard, so alpha errors count</span>
+  </div>
+  <input id="file-input" type="file" accept="image/*" multiple hidden />
+
+  <div id="dropzone">
+    <table>
+      <thead><tr id="head-row"></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <footer id="status"></footer>
+</body>
+</html>
