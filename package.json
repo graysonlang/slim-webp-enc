@@ -1,7 +1,7 @@
 {
   "name": "@graysonlang/slim-webp-enc",
-  "version": "1.0.0",
-  "description": "Pure-TypeScript lossy WebP thumbnail encoder with alpha support",
+  "version": "1.1.0",
+  "description": "Pure-TypeScript lossy WebP encoder with alpha support",
   "keywords": [
     "webp",
     "webp-encoder",

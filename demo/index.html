@@ -87,6 +87,7 @@
       background: var(--checker);
       display: block;
       image-rendering: auto;
+      cursor: pointer; /* click toggles the checkerboard */
     }
     .cell .meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
     .cell .meta b { color: var(--fg); font-weight: 600; }
@@ -109,7 +110,11 @@
     .controls {
       display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
       background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-      padding: 14px 16px; margin: 0 0 20px;
+      padding: 14px 16px; margin: 0 0 12px;
+    }
+    .toolbar {
+      display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+      margin: 0 0 12px;
     }
     .control { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
     .control b { color: var(--fg); font-variant-numeric: tabular-nums; min-width: 3ch; }
@@ -118,12 +123,12 @@
       font: inherit; font-size: 12px; color: var(--fg); background: #1d1d1d;
       border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; cursor: pointer;
     }
-    .controls button, .toggle {
+    .controls button, .toolbar button, .toggle {
       font: inherit; font-size: 12px; color: var(--fg); background: #262626;
       border: 1px solid var(--line); border-radius: 7px; padding: 5px 12px; cursor: pointer;
       display: inline-flex; align-items: center; gap: 8px;
     }
-    .controls button:hover, .toggle:hover { border-color: var(--accent); }
+    .controls button:hover, .toolbar button:hover, .toggle:hover { border-color: var(--accent); }
     .toggle .swatch {
       width: 14px; height: 14px; border-radius: 3px;
       border: 1px solid var(--line); background: var(--checker);
@@ -136,14 +141,16 @@
   <header>
     <h1>slim-webp-enc — side-by-side comparison</h1>
     <p class="lede">
-      <b>slim-webp-enc</b> is a pure-TypeScript lossy WebP encoder with semi-lossy alpha, built for
-      thumbnail generation on browsers without native WebP encoding (WebKit/Safari).
+      <b>slim-webp-enc</b> is a pure-TypeScript lossy WebP encoder with semi-lossy alpha for
+      browsers without native WebP encoding (WebKit/Safari). It isn't a full libwebp
+      replacement — no animation, metadata, or general-purpose lossless — but for typical
+      images it encodes in milliseconds at sizes and quality comparable to the native encoders.
       Each row encodes the same image with <b>slim-webp-enc</b>, the browser's native
       <code>canvas.toBlob('image/webp')</code> (absent on WebKit), and PNG as a baseline.
       All previews are the browser's own decode of the encoded bytes.
     </p>
     <p class="lede">
-      Drag/drop or <code>Upload</code> images to compare with your own thumbnails.
+      Drag/drop or <code>Upload</code> images to compare with your own.
     </p>
   </header>
 
@@ -158,11 +165,13 @@
     </span>
     <span class="control"><label><input id="alpha-dither" type="checkbox" checked> alpha dither</label></span>
     <span class="control"><label><input id="alpha-adaptive" type="checkbox" checked> adaptive levels</label></span>
+    <span class="hint">PSNR is measured on the decode composited over a checkerboard, so alpha errors count</span>
+  </div>
+  <div class="toolbar">
     <button id="checker-toggle" type="button" class="toggle">
       <span class="swatch"></span>Checkerboard: <b id="checker-label">dark</b>
     </button>
     <button id="upload-btn" type="button">Upload</button>
-    <span class="hint">PSNR is measured on the decode composited over a checkerboard, so alpha errors count</span>
   </div>
   <input id="file-input" type="file" accept="image/*" multiple hidden />
 

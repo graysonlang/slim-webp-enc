@@ -1,10 +1,10 @@
 # slim-webp-enc
 
-A pure-TypeScript lossy WebP encoder with alpha support, purpose-built for **thumbnail generation** — no WASM, no loader complexity, zero runtime dependencies. Motivated by WebKit/Safari's lack of native `canvas.toBlob('image/webp')` support.
+A pure-TypeScript lossy WebP encoder with alpha support — no WASM, no loader complexity, zero runtime dependencies. Motivated by WebKit/Safari's lack of native `canvas.toBlob('image/webp')` support. Not a full libwebp replacement (see the non-goals below), but for typical images it encodes in milliseconds at sizes and quality comparable to the browsers' native encoders.
 
-- **32 KB minified** (10.9 KB gzip) vs ~200–300 KB for a WASM libwebp build
-- Single-digit-millisecond encodes at thumbnail sizes (256² ≈ 4–6 ms)
-- Semi-lossy alpha (16-level reduction, 0/255 pinned exactly) compressed with a built-in mini-VP8L coder — typically **smaller total files than `cwebp -m 0`** on alpha-carrying thumbnails
+- **33 KB minified** (11.5 KB gzip) vs ~200–300 KB for a WASM libwebp build
+- Single-digit-millisecond encodes at common sizes (256² ≈ 4–6 ms)
+- Semi-lossy alpha (16-level reduction, 0/255 pinned exactly) compressed with a built-in mini-VP8L coder — typically **smaller total files than `cwebp -m 0`** on alpha-carrying images
 
 ## Usage
 
@@ -27,7 +27,7 @@ if (!(await hasNativeWebPEncoder())) {
 
 | Option | Default | Notes |
 |---|---|---|
-| `quality` | `80` | 0–100, same scale as cwebp; default matches the browsers' native WebP encoder default |
+| `quality` | `80` | 0–100, same scale as cwebp; default matches the browsers' native WebP encoder default. Follows the HTML canvas rule for invalid values: out-of-range, NaN, and ±Infinity encode at the default, as if omitted |
 | `alphaLevels` | `16` | 8 / 16 / 32 semi-lossy alpha levels; 0 and 255 always exact |
 | `alphaDither` | `1` | Ordered-dither strength 0–1 for the alpha level reduction. Hides banding on smooth alpha gradients at some alpha-payload cost; exact 0/255 pixels never dither. `0` disables |
 | `alphaAdaptive` | `true` | Pick alpha level values by Lloyd-Max (like libwebp's `-alpha_q`) instead of a uniform grid. Min/max stay exact; masks with ≤ `alphaLevels` distinct values pass through losslessly |
@@ -37,7 +37,7 @@ if (!(await hasNativeWebPEncoder())) {
 
 ## Scope
 
-Encodes a single lossy VP8 keyframe (16×16 intra modes, single segment, flat quantization, adaptive token probabilities) in a RIFF/VP8X/ALPH container. Alpha is level-reduced, prediction-filtered, and coded as a minimal VP8L stream (ALPH method 1). Flat-color images (≤ 256 distinct colors) are also tried as palette-based lossless VP8L and the smaller file is kept — `quality` is a floor, never a ceiling. Non-goals: animation, metadata, general-purpose lossless RGB (only the palette subset above), decode, rate control. Files run roughly 10–25 % larger than `cwebp -m 0` for opaque RGB at matched SSIM; alpha-heavy thumbnails usually come out *smaller* thanks to the semi-lossy alpha strategy.
+Encodes a single lossy VP8 keyframe (16×16 intra modes, single segment, flat quantization, adaptive token probabilities) in a RIFF/VP8X/ALPH container. RGB→YUV conversion matches libwebp's import pipeline — gamma-corrected chroma averaging, alpha-weighted on mixed-transparency blocks, and block-local luma smoothing under the mask — so alpha-edge chroma matches what browsers' native encoders produce instead of washing out. Alpha is level-reduced, prediction-filtered, and coded as a minimal VP8L stream (ALPH method 1). Flat-color images (≤ 256 distinct colors) are also tried as palette-based lossless VP8L and the smaller file is kept — `quality` is a floor, never a ceiling. Non-goals: animation, metadata, general-purpose lossless RGB (only the palette subset above), decode, rate control. Files run roughly 10–25 % larger than `cwebp -m 0` for opaque RGB at matched SSIM; alpha-heavy images usually come out *smaller* thanks to the semi-lossy alpha strategy.
 
 ## Performance
 
@@ -52,7 +52,7 @@ Median encode times in headless Chrome (Apple Silicon, q80; `node harness/bench-
 | sprite (lossless path) | 256² | 4.5 ms | 2.3 ms | 1.1 ms |
 | sprite (lossless path) | 512² | 17.3 ms | 7.8 ms | 3.6 ms |
 
-Per encode: 1–2× native (faster than native on 512² alpha content), and 3–5× slower than WASM libwebp. The trade is the payload: WASM costs a **337 KB download plus ~24 ms compile/init** before the first encode, vs this library's 32 KB bundle with none — and our output was smaller than both in nearly every cell (sprite 512²: 1.6 KB vs 7–10 KB, thanks to the lossless path). Benchmark content is the harness corpus itself (`harness/content.ts`), so these rows measure the same images the quality metrics do. For a page encoding a handful of thumbnails, the WASM speed advantage never pays back its startup cost; sustained bulk encoding is where WASM wins.
+Per encode: 1–2× native (faster than native on 512² alpha content), and 3–5× slower than WASM libwebp. The trade is the payload: WASM costs a **337 KB download plus ~24 ms compile/init** before the first encode, vs this library's 33 KB bundle with none — and our output was smaller than both in nearly every cell (sprite 512²: 1.6 KB vs 7–10 KB, thanks to the lossless path). Benchmark content is the harness corpus itself (`harness/content.ts`), so these rows measure the same images the quality metrics do. For a page encoding a handful of images, the WASM speed advantage never pays back its startup cost; sustained bulk encoding is where WASM wins.
 
 ## Example app
 

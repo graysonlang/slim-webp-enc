@@ -286,10 +286,11 @@ function wireControls() {
   });
 
   const checkerLabel = document.getElementById('checker-label');
-  document.getElementById('checker-toggle').addEventListener('click', () => {
+  const toggleChecker = () => {
     const light = document.body.classList.toggle('checker-light');
     checkerLabel.textContent = light ? 'light' : 'dark';
-  });
+  };
+  document.getElementById('checker-toggle').addEventListener('click', toggleChecker);
 
   const input = document.getElementById('file-input');
   document.getElementById('upload-btn').addEventListener('click', () => input.click());
@@ -298,6 +299,12 @@ function wireControls() {
   // Listen on body only — drops anywhere (including the dropzone) bubble up,
   // and a second listener on the dropzone would add every file twice.
   const dropzone = document.getElementById('dropzone');
+
+  // Clicking any preview toggles the checkerboard too (same interaction as
+  // the finehash demo). Delegated: previews are re-created on every render.
+  dropzone.addEventListener('click', (e) => {
+    if (e.target.matches('.cell canvas, .cell img')) toggleChecker();
+  });
   document.body.addEventListener('dragover', (e) => {
     e.preventDefault();
     dropzone.classList.add('dragover');

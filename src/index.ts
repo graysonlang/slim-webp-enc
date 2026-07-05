@@ -1,10 +1,10 @@
-// Public API: pure-TS lossy WebP encoder for thumbnails.
+// Public API: pure-TS lossy WebP encoder with alpha support.
 
 export { hasNativeWebPEncoder } from "./detect.ts";
 
 import { alphaPlane, encodeAlpha, type AlphaLevels } from "./alpha.ts";
 import { buildWebP, buildWebPLossless } from "./container.ts";
-import { rgbaToYuv420 } from "./yuv.ts";
+import { rgbaToYuv420, smoothTransparentAreas } from "./yuv.ts";
 import { encodeVP8Frame } from "./vp8.ts";
 import { encodeVP8L } from "./vp8l.ts";
 
@@ -16,10 +16,15 @@ export interface ImageDataLike {
 
 export interface EncodeOptions {
   /**
-   * 0–100, like cwebp. Default 80, matching the browsers' native encoder
-   * default. Note: unlike `canvas.toBlob('image/webp', 1.0)`, which browsers
-   * special-case to fully lossless output, 100 here is still lossy (finest
-   * quantization, 4:2:0 chroma) — use `lossless` for pixel-exact output.
+   * 0–100, like cwebp. Default 80 when omitted, matching the browsers'
+   * native encoder default. Follows the HTML canvas encoding rule (scaled
+   * to 0–100): a quality outside the valid range — including NaN and
+   * ±Infinity — is treated as if it had not been given and encodes at the
+   * default, exactly like the native canvas encoders slim fills in for.
+   * Note: unlike `canvas.toBlob('image/webp', 1.0)`, which browsers
+   * special-case to fully lossless output, 100 here is still lossy
+   * (finest quantization, 4:2:0 chroma) — use `lossless` for pixel-exact
+   * output.
    */
   quality?: number;
   /**
@@ -89,15 +94,26 @@ function validateImage(width: number, height: number, dataLength: number): void 
 
 /**
  * Numeric options must be finite: NaN slips through comparison-based clamps
- * (`x < 0` and `x > 1` are both false) and poisons the quantizers downstream.
+ * (`x < 0` and `x > 1` are both false) and poisons downstream math.
+ * `quality` is exempt — resolveQuality absorbs any invalid value into the
+ * default, matching the native canvas encoders (a slim-only throw would
+ * fail only on the WebKit fallback path, the least-tested environment).
  */
 function validateOptions(opts: EncodeOptions): void {
-  if (opts.quality !== undefined && !Number.isFinite(opts.quality)) {
-    throw new RangeError(`encodeWebP: quality must be a finite number (got ${opts.quality})`);
-  }
   if (opts.alphaDither !== undefined && !Number.isFinite(opts.alphaDither)) {
     throw new RangeError(`encodeWebP: alphaDither must be a finite number (got ${opts.alphaDither})`);
   }
+}
+
+/**
+ * HTML spec rule for canvas image encoding ("if quality is outside the
+ * range, the user agent must use its default quality value, as if the
+ * quality argument had not been given"), scaled to slim's 0–100 range:
+ * omitted, out-of-range, NaN, and ±Infinity all encode at the default 80
+ * (NaN fails both comparisons and falls into the default branch).
+ */
+function resolveQuality(quality: number | undefined): number {
+  return quality !== undefined && quality >= 0 && quality <= 100 ? quality : 80;
 }
 
 /**
@@ -109,38 +125,6 @@ function qualityToQi(quality: number): number {
   const linear = q < 0.75 ? q * (2 / 3) : 2 * q - 1;
   const c = Math.cbrt(linear);
   return Math.round(127 * (1 - c));
-}
-
-/**
- * Replace the RGB of fully-transparent pixels with the average visible color.
- * Invisible after compositing, but removes hard edges under the alpha mask —
- * the same idea as libwebp's WebPCleanupTransparentArea (cwebp default).
- */
-function cleanupTransparent(rgba: Uint8Array): Uint8Array {
-  let r = 0, g = 0, b = 0, n = 0, transparent = 0;
-  for (let i = 0; i < rgba.length; i += 4) {
-    if (rgba[i + 3] === 0) {
-      transparent++;
-    } else {
-      r += rgba[i];
-      g += rgba[i + 1];
-      b += rgba[i + 2];
-      n++;
-    }
-  }
-  if (transparent === 0) return rgba;
-  const ar = n ? Math.round(r / n) : 255;
-  const ag = n ? Math.round(g / n) : 255;
-  const ab = n ? Math.round(b / n) : 255;
-  const out = rgba.slice();
-  for (let i = 0; i < out.length; i += 4) {
-    if (out[i + 3] === 0) {
-      out[i] = ar;
-      out[i + 1] = ag;
-      out[i + 2] = ab;
-    }
-  }
-  return out;
 }
 
 export function encodeWebP(image: ImageDataLike, opts: EncodeOptions = {}): Uint8Array {
@@ -164,8 +148,6 @@ export function encodeWebP(image: ImageDataLike, opts: EncodeOptions = {}): Uint
     }
   }
 
-  const rgbSource = hasAlpha ? cleanupTransparent(rgba) : rgba;
-
   // Lossless candidate: only representable with ≤ 256 distinct colors, where
   // it is also the content class most likely to beat lossy on size. Encodes
   // the untouched pixels — not the transparency-flattened ones — so a
@@ -178,8 +160,12 @@ export function encodeWebP(image: ImageDataLike, opts: EncodeOptions = {}): Uint
     if (losslessFile && losslessMode === true) return losslessFile;
   }
 
-  const yuv = rgbaToYuv420(rgbSource, width, height);
-  const vp8 = encodeVP8Frame(yuv, { qi: qualityToQi(opts.quality ?? 80) });
+  // Transparency handling mirrors libwebp (see yuv.ts): alpha-weighted
+  // chroma averaging during conversion, then block-local luma smoothing
+  // under the mask — not a global fill color, which washes out edge chroma.
+  const yuv = rgbaToYuv420(rgba, width, height, hasAlpha ? alpha : undefined);
+  if (hasAlpha) smoothTransparentAreas(yuv, alpha);
+  const vp8 = encodeVP8Frame(yuv, { qi: qualityToQi(resolveQuality(opts.quality)) });
 
   let lossyFile: Uint8Array;
   if (!hasAlpha) {
