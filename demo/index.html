@@ -13,7 +13,7 @@
       --fg: #ddd;
       --muted: #888;
       --accent: #6cf;
-      --slim: #e8912a;
+      --hero: #e8912a;
       --cell: 160px;
       --checker-dark: #111 0px 0px / 16px url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2" fill="white" fill-opacity="0.025"><rect width="1" height="1" /><rect x="1" y="1" width="1" height="1" /></svg>');
       --checker-light: #fff 0px 0px / 16px url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2" fill="black" fill-opacity="0.05"><rect width="1" height="1" /><rect x="1" y="1" width="1" height="1" /></svg>');
@@ -30,7 +30,7 @@
     }
     header { margin-bottom: 20px; }
     h1 { font-size: 20px; margin: 0 0 4px; }
-    p.lede { color: var(--muted); max-width: 88ch; }
+    p.lede { color: var(--muted); line-height: 1.55; }
     p.lede code { color: var(--accent); }
     p.lede b { color: var(--fg); }
 
@@ -62,20 +62,20 @@
     tbody tr:hover { background: #151515; }
 
     thead th:nth-child(2) {
-      color: var(--slim);
-      border-top: 2px solid var(--slim);
-      border-left: 2px solid var(--slim);
-      border-right: 2px solid var(--slim);
+      color: var(--hero);
+      border-top: 2px solid var(--hero);
+      border-left: 2px solid var(--hero);
+      border-right: 2px solid var(--hero);
       border-top-left-radius: 10px;
       border-top-right-radius: 10px;
     }
     tbody td:nth-child(2) {
-      border-left: 2px solid var(--slim);
-      border-right: 2px solid var(--slim);
+      border-left: 2px solid var(--hero);
+      border-right: 2px solid var(--hero);
       background: rgba(232, 145, 42, 0.05);
     }
     tbody tr:last-child td:nth-child(2) {
-      border-bottom: 2px solid var(--slim);
+      border-bottom: 2px solid var(--hero);
       border-bottom-left-radius: 10px;
       border-bottom-right-radius: 10px;
     }
@@ -118,7 +118,7 @@
     }
     .control { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
     .control b { color: var(--fg); font-variant-numeric: tabular-nums; min-width: 3ch; }
-    .control input[type=range] { accent-color: var(--slim); width: 160px; }
+    .control input[type=range] { accent-color: var(--hero); width: 160px; }
     .control select {
       font: inherit; font-size: 12px; color: var(--fg); background: #1d1d1d;
       border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; cursor: pointer;
@@ -140,18 +140,8 @@
 <body>
   <header>
     <h1>slim-webp-enc — side-by-side comparison</h1>
-    <p class="lede">
-      <b>slim-webp-enc</b> is a pure-TypeScript lossy WebP encoder with semi-lossy alpha for
-      browsers without native WebP encoding (WebKit/Safari). It isn't a full libwebp
-      replacement — no animation, metadata, or general-purpose lossless — but for typical
-      images it encodes in milliseconds at sizes and quality comparable to the native encoders.
-      Each row encodes the same image with <b>slim-webp-enc</b>, the browser's native
-      <code>canvas.toBlob('image/webp')</code> (absent on WebKit), and PNG as a baseline.
-      All previews are the browser's own decode of the encoded bytes.
-    </p>
-    <p class="lede">
-      Drag/drop or <code>Upload</code> images to compare with your own.
-    </p>
+    <p class="lede"><b>slim-webp-enc</b> is a pure-TypeScript lossy WebP encoder with semi-lossy alpha for browsers without native WebP encoding (WebKit/Safari). It isn't a full libwebp replacement — no animation, metadata, or general-purpose lossless — but for typical images it encodes in milliseconds at sizes and quality comparable to the native encoders. Each row encodes the same image with <b>slim-webp-enc</b>, the browser's native <code>canvas.toBlob('image/webp')</code> (absent on WebKit), and PNG as a baseline. All previews are the browser's own decode of the encoded bytes.</p>
+    <p class="lede">Drag/drop or <code>Upload</code> images to compare with your own.</p>
   </header>
 
   <div class="controls">
