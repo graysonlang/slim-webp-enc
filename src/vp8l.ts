@@ -1,8 +1,8 @@
 // Mini-VP8L encoder for ALPH method 1: the (already filtered) alpha plane is
 // coded as the green channel of a headerless VP8L stream (no signature, no
-// size fields — dimensions come from the frame). Scope per PLAN.md: no VP8L
-// transforms, no palette, no color cache, one Huffman group, greedy LZ77
-// limited to distance 1 (run) and distance = width (row copy).
+// size fields — dimensions come from the frame). Deliberately minimal: no
+// VP8L transforms, no palette, no color cache, one Huffman group, greedy
+// LZ77 over a small set of candidate distances.
 //
 // Bitstream references: WebP Lossless Bitstream Specification;
 // libwebp dec/vp8l_dec.c (DecodeImageStream) is the authoritative reader.
@@ -280,14 +280,22 @@ type Op =
   | { literal: number } // ARGB pixel value
   | { length: number; distCode: number };
 
+// Candidate match distances: short horizontal runs, the row above (offset a
+// pixel either way, for drift), and 2/4 rows up — 4 being the Bayer-dither
+// period, so dithered smooth gradients still find long matches.
+const REF_DISTANCES = (width: number) => [
+  1, 2, 3, 4, width - 1, width, width + 1, 2 * width, 4 * width,
+];
+
 function findRefs(pixels: Uint32Array, width: number): Op[] {
   const ops: Op[] = [];
   const n = pixels.length;
+  const distances = REF_DISTANCES(width).filter((d) => d > 0 && d < n);
   let i = 0;
   while (i < n) {
     let bestLen = 0;
     let bestDist = 0;
-    for (const dist of i >= width ? [1, width] : [1]) {
+    for (const dist of distances) {
       if (i < dist) continue;
       let len = 0;
       const max = Math.min(MAX_MATCH, n - i);

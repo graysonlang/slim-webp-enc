@@ -116,6 +116,32 @@ export function compareRGBA(
   };
 }
 
+/**
+ * Alpha-weighted per-channel PSNR over straight (non-composited) RGB:
+ * each pixel's squared error is weighted by its source alpha, so colors
+ * hidden under the mask don't count and edge chroma is weighted fairly.
+ * Same metric as the parity probe.
+ */
+export function psnrPerChannelAlphaWeighted(
+  src: Uint8Array,
+  dec: Uint8Array,
+): { r: number; g: number; b: number; rgb: number } {
+  const se = [0, 0, 0];
+  let wsum = 0;
+  for (let i = 0; i < src.length; i += 4) {
+    const w = src[i + 3] / 255;
+    if (w === 0) continue;
+    wsum += w;
+    for (let c = 0; c < 3; c++) {
+      const d = src[i + c] - dec[i + c];
+      se[c] += w * d * d;
+    }
+  }
+  const p = (s: number) =>
+    wsum === 0 || s === 0 ? Infinity : 10 * Math.log10((255 * 255 * wsum) / s);
+  return { r: p(se[0]), g: p(se[1]), b: p(se[2]), rgb: p((se[0] + se[1] + se[2]) / 3) };
+}
+
 /** Max absolute difference between two alpha planes extracted from RGBA. */
 export function alphaMaxDiff(src: Uint8Array, dec: Uint8Array): number {
   let max = 0;

@@ -136,4 +136,58 @@ export const sprite: Generator = (w, h) => {
   return px;
 };
 
-export const GENERATORS: Record<string, Generator> = { photo, avatar, flat, sprite };
+/**
+ * Banner fade — the ar_background pathology, synthesized: a full-range
+ * horizontal alpha gradient with slight per-row jitter over a soft color
+ * wash. The alpha plane has ~256 distinct values and is neither row- nor
+ * column-constant, so its wide smooth transitions both expose banding when
+ * the level reduction goes undithered and defeat run-only LZ77 when it
+ * doesn't — the case the gradient-axis 1-D dither candidate exists for.
+ */
+export const fade: Generator = (w, h) => {
+  const rng = mulberry32(0xfade);
+  const px = new Uint8Array(w * h * 4);
+  // deterministic per-row offset plus per-pixel noise (~±1 alpha level each),
+  // like the real asset: enough to break row/column copies so the lossless
+  // plane can't win, far too little to matter visually
+  const jitter = new Float64Array(h);
+  for (let y = 0; y < h; y++) jitter[y] = (rng() - 0.5) * 2.5;
+  for (let y = 0; y < h; y++) {
+    const v = y / h;
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      px[i] = clamp255(30 + 40 * v);
+      px[i + 1] = clamp255(45 + 60 * v);
+      px[i + 2] = clamp255(70 + 90 * v);
+      px[i + 3] = clamp255((255 * x) / (w - 1) + jitter[y] + (rng() - 0.5) * 2.4);
+    }
+  }
+  return px;
+};
+
+/**
+ * Shade — a low-range alpha gradient (shadow-overlay class, found in a
+ * personal-archive sweep as "Gradient Transparent"): a vertical alpha ramp
+ * spanning only 0..64, with the same jitter/noise recipe as `fade`. The
+ * adaptive quantizer packs its levels ~2 apart here, so this pins the
+ * sub-visible-step rule: dithering gaps that small is invisible but
+ * scrambles LZ77, tripling the payload.
+ */
+export const shade: Generator = (w, h) => {
+  const rng = mulberry32(0x5ade);
+  const px = new Uint8Array(w * h * 4);
+  const jitter = new Float64Array(h);
+  for (let y = 0; y < h; y++) jitter[y] = (rng() - 0.5) * 2.5;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      px[i] = 12;
+      px[i + 1] = 12;
+      px[i + 2] = 16;
+      px[i + 3] = clamp255((64 * y) / (h - 1) + jitter[y] + (rng() - 0.5) * 2.4);
+    }
+  }
+  return px;
+};
+
+export const GENERATORS: Record<string, Generator> = { photo, avatar, flat, sprite, fade, shade };

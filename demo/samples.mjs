@@ -1,9 +1,10 @@
 // Procedural test patterns for the WebP comparison demo. The avatar, sprite,
-// badge, and photo patterns are the harness corpus generators themselves
-// (harness/content.ts), so the demo shows exactly the content the harness
-// measures; the alpha ramp is demo-only, making level-reduction banding easy
-// to eyeball. The host supplies canvas + ImageData primitives so this module
-// stays free of both DOM and Node specifics.
+// badge, photo, and fade patterns are the harness corpus generators
+// themselves (harness/content.ts), so the demo shows exactly the content the
+// harness measures; the alpha ramp is demo-only, making level-reduction
+// banding easy to eyeball (fade is its noisy real-world cousin). The host
+// supplies canvas + ImageData primitives so this module stays free of both
+// DOM and Node specifics.
 
 import { GENERATORS, clamp255 } from '../harness/content.ts';
 
@@ -31,6 +32,7 @@ const SAMPLES = [
   ['badge', 256, 256, GENERATORS.flat],
   ['photo', 256, 256, GENERATORS.photo],
   ['alpha-ramp', 256, 128, alphaRamp],
+  ['fade', 512, 192, GENERATORS.fade],
 ];
 
 // Returns build() -> [{ name, canvas }]: one rendered canvas per sample, which

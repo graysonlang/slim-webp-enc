@@ -1,6 +1,6 @@
 {
   "name": "@graysonlang/slim-webp-enc",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Pure-TypeScript lossy WebP encoder with alpha support",
   "keywords": [
     "webp",
@@ -50,10 +50,11 @@
     "dist": "node ./scripts/dist.mjs",
     "prepare": "npm run dist",
     "corpus": "node harness/corpus.ts",
-    "harness": "node harness/run.ts",
+    "harness": "node harness/run.ts --encoder=slim",
     "compare": "node harness/compare.ts",
     "typecheck": "tsc --noEmit",
-    "size": "node harness/size-gate.ts"
+    "size": "node harness/size-gate.ts",
+    "deploy-test": "node scripts/pack-test.mjs"
   },
   "devDependencies": {
     "@graysonlang/esp": "^1.6.2",

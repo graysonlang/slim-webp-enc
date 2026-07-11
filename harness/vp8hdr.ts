@@ -16,7 +16,7 @@
 import { readFile } from "node:fs/promises";
 import { extractChunk } from "../src/container.ts";
 import { AC_TABLE, COEFFS_UPDATE_PROBA, DC_TABLE } from "../src/tables.ts";
-import { KB_MODES_PROBA } from "./kbmodes-proba.ts";
+import { KB_MODES_PROBA } from "../src/tables.ts";
 
 // ---------------------------------------------------------------------------
 // Boolean decoder (RFC 6386 §7.2)

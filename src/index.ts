@@ -2,7 +2,7 @@
 
 export { hasNativeWebPEncoder } from "./detect.ts";
 
-import { alphaPlane, encodeAlpha, type AlphaLevels } from "./alpha.ts";
+import { alphaPlane, DEFAULT_ALPHA_LEVELS, encodeAlpha, type AlphaLevels } from "./alpha.ts";
 import { buildWebP, buildWebPLossless } from "./container.ts";
 import { rgbaToYuv420, smoothTransparentAreas } from "./yuv.ts";
 import { encodeVP8Frame } from "./vp8.ts";
@@ -28,7 +28,19 @@ export interface EncodeOptions {
    */
   quality?: number;
   /**
-   * Alpha level-reduction cap. Default 16. The encoder also tries the
+   * Encoding strategy. "quality" (the default) runs a rate-distortion mode
+   * search including 4×4 intra modes, matching libwebp's method-3 behavior —
+   * the best output this encoder can produce. "fast" selects modes by
+   * prediction error alone: roughly 3× faster, ~1 dB lower average PSNR at
+   * similar average size, and up to ~40% larger on gradient/edge-heavy
+   * images. Both settings produce valid WebP; this only trades encode time
+   * against output quality/size.
+   */
+  effort?: "fast" | "quality";
+  /**
+   * Alpha level-reduction cap. Default 32 — banding on slow alpha
+   * gradients is far more visible than the payload difference; drop to 16/8
+   * to shave alpha bytes on mask-like content. The encoder also tries the
    * untouched lossless plane and keeps whichever encoding is smaller, so
    * smooth alpha gradients stay lossless automatically.
    */
@@ -103,6 +115,23 @@ function validateOptions(opts: EncodeOptions): void {
   if (opts.alphaDither !== undefined && !Number.isFinite(opts.alphaDither)) {
     throw new RangeError(`encodeWebP: alphaDither must be a finite number (got ${opts.alphaDither})`);
   }
+  if (opts.effort !== undefined && opts.effort !== "fast" && opts.effort !== "quality") {
+    throw new RangeError(
+      `encodeWebP: effort must be "fast" or "quality" (got ${JSON.stringify(opts.effort)})`,
+    );
+  }
+  if (
+    opts.alphaLevels !== undefined &&
+    opts.alphaLevels !== 8 &&
+    opts.alphaLevels !== 16 &&
+    opts.alphaLevels !== 32
+  ) {
+    // untyped callers can pass anything; 0 or NaN would silently corrupt the
+    // level-reduction LUTs
+    throw new RangeError(
+      `encodeWebP: alphaLevels must be 8, 16, or 32 (got ${JSON.stringify(opts.alphaLevels)})`,
+    );
+  }
 }
 
 /**
@@ -165,7 +194,10 @@ export function encodeWebP(image: ImageDataLike, opts: EncodeOptions = {}): Uint
   // under the mask — not a global fill color, which washes out edge chroma.
   const yuv = rgbaToYuv420(rgba, width, height, hasAlpha ? alpha : undefined);
   if (hasAlpha) smoothTransparentAreas(yuv, alpha);
-  const vp8 = encodeVP8Frame(yuv, { qi: qualityToQi(resolveQuality(opts.quality)) });
+  const vp8 = encodeVP8Frame(yuv, {
+    qi: qualityToQi(resolveQuality(opts.quality)),
+    effort: opts.effort,
+  });
 
   let lossyFile: Uint8Array;
   if (!hasAlpha) {
@@ -175,7 +207,7 @@ export function encodeWebP(image: ImageDataLike, opts: EncodeOptions = {}): Uint
       alpha,
       width,
       height,
-      opts.alphaLevels ?? 16,
+      opts.alphaLevels ?? DEFAULT_ALPHA_LEVELS,
       opts.alphaDither ?? 1,
       opts.alphaAdaptive ?? true,
     );

@@ -101,7 +101,7 @@ try {
 
 console.log(
   `wasm one-time cost: ${(init.wasmB / 1024).toFixed(0)} KB download + ` +
-    `${init.initMs.toFixed(0)} ms compile/init (ours: 32 KB bundle, no init)\n`,
+    `${init.initMs.toFixed(0)} ms compile/init (ours: 44 KB bundle, no init)\n`,
 );
 console.log(
   `${"content".padEnd(9)}${"size".padStart(6)}${"ours ms".padStart(9)}${"native ms".padStart(11)}` +

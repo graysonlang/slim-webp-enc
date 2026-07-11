@@ -7,8 +7,43 @@ import { encodeAlphaVP8L } from "./vp8l.ts";
 
 export type AlphaLevels = 8 | 16 | 32;
 
+/**
+ * Default level-reduction cap, shared by the public API and the harnesses so
+ * expectations can't drift from shipping behavior. 32 favors smooth
+ * gradients: banding is far more visible than the payload difference.
+ */
+export const DEFAULT_ALPHA_LEVELS: AlphaLevels = 32;
+
 // 4x4 Bayer matrix (values 0..15); thresholds are (v + 0.5)/16 - 0.5.
 const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+// 8-phase 1-D ordered-dither sequence (bit-reversal order).
+const BAYER8 = [0, 4, 2, 6, 1, 5, 3, 7];
+
+/**
+ * Dither pattern: the default 4x4 Bayer, or a 1-D pattern varying along one
+ * axis only. On an axis-aligned gradient the 1-D pattern leaves every row
+ * (resp. column) identical, so it costs the LZ77 stage nothing — and being
+ * free of the 2-D constraint it can afford 8 phases for smoother
+ * transitions.
+ */
+export type DitherPattern = "2d" | "x" | "y";
+
+/** Dither threshold offset in [-0.5, 0.5) for pixel (x, y). */
+function ditherOffset(x: number, y: number, pattern: DitherPattern): number {
+  if (pattern === "x") return (BAYER8[x & 7] + 0.5) / 8 - 0.5;
+  if (pattern === "y") return (BAYER8[y & 7] + 0.5) / 8 - 0.5;
+  return (BAYER4[(y & 3) * 4 + (x & 3)] + 0.5) / 16 - 0.5;
+}
+
+/**
+ * Smallest gap between adjacent quantization levels worth dithering, in
+ * alpha units. Below this, banding amplitude is invisible (< ~1.6% of full
+ * alpha) but the dither pattern still scrambles LZ77 — e.g. a low-range
+ * shadow ramp quantized adaptively can have gaps of ~2 where dithering
+ * triples the payload for nothing. Dither where it can be seen, not where
+ * it can't.
+ */
+const DITHER_MIN_GAP = 4;
 
 /**
  * Semi-lossy level reduction. Uniform levels with 0 and 255 representable
@@ -22,8 +57,9 @@ const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 export function quantizeAlpha(
   alpha: Uint8Array,
   width: number,
-  levels: AlphaLevels = 16,
+  levels: AlphaLevels = DEFAULT_ALPHA_LEVELS,
   dither = 1,
+  pattern: DitherPattern = "2d",
 ): Uint8Array {
   const step = 255 / (levels - 1);
   const out = new Uint8Array(alpha.length);
@@ -39,7 +75,7 @@ export function quantizeAlpha(
   for (let i = 0; i < alpha.length; i++) {
     const x = i % width;
     const y = (i / width) | 0;
-    const offset = ((BAYER4[(y & 3) * 4 + (x & 3)] + 0.5) / 16 - 0.5) * strength;
+    const offset = ditherOffset(x, y, pattern) * strength;
     const level = Math.round(alpha[i] / step + offset);
     const v = Math.round(level * step);
     out[i] = v < 0 ? 0 : v > 255 ? 255 : v;
@@ -60,8 +96,9 @@ export function quantizeAlpha(
 export function quantizeAlphaAdaptive(
   alpha: Uint8Array,
   width: number,
-  levels: AlphaLevels = 16,
+  levels: AlphaLevels = DEFAULT_ALPHA_LEVELS,
   dither = 1,
+  pattern: DitherPattern = "2d",
 ): Uint8Array {
   const freq = new Uint32Array(256);
   let minS = 255;
@@ -110,9 +147,11 @@ export function quantizeAlphaAdaptive(
   level[0] = minS;
   level[levels - 1] = maxS;
 
-  // per-value LUTs: bracketing lower level + fractional position in the gap
+  // per-value LUTs: bracketing lower level, fractional position in the gap,
+  // and whether the local gap is wide enough for dithering to be visible
   const lowSlot = new Uint8Array(256);
   const frac = new Float64Array(256);
+  const dith = new Uint8Array(256);
   {
     let k = 0;
     for (let s = minS; s <= maxS; s++) {
@@ -120,6 +159,7 @@ export function quantizeAlphaAdaptive(
       lowSlot[s] = k;
       const gap = level[k + 1] - level[k];
       frac[s] = gap > 0 ? (s - level[k]) / gap : 0;
+      dith[s] = gap >= DITHER_MIN_GAP ? 1 : 0;
     }
   }
 
@@ -128,10 +168,10 @@ export function quantizeAlphaAdaptive(
   for (let i = 0; i < alpha.length; i++) {
     const s = alpha[i];
     let idx: number;
-    if (strength > 0) {
+    if (strength > 0 && dith[s]) {
       const x = i % width;
       const y = (i / width) | 0;
-      const offset = ((BAYER4[(y & 3) * 4 + (x & 3)] + 0.5) / 16 - 0.5) * strength;
+      const offset = ditherOffset(x, y, pattern) * strength;
       idx = lowSlot[s] + Math.round(frac[s] + offset);
     } else {
       idx = lowSlot[s] + Math.round(frac[s]);
@@ -196,29 +236,52 @@ function entropy(data: Uint8Array): number {
 }
 
 /**
- * Estimated post-LZ77 cost of a filtered plane, in bits: the entropy of the
- * values at run-break positions times their count. Pixels equal to their
- * left neighbor are (nearly) free as distance-1 run extensions, so plain
- * whole-plane entropy badly misranks filters for run-heavy planes.
+ * Estimated post-LZ77 cost of a filtered plane, in bits. Pixels equal to a
+ * predecessor at one of the coder's match distances (left neighbor, row
+ * above, 4 rows above — see vp8l.ts REF_DISTANCES) form match streaks;
+ * everything else is a literal costed at streak-literal entropy. Two
+ * details matter for ranking fidelity (mis-ranking here once cost 23% on a
+ * noisy low-range ramp): streaks shorter than MIN_MATCH(4) are really
+ * literals, and each surviving match pays a length+distance token (~16
+ * bits) — a plane shredded into short runs is far dearer than its literal
+ * count suggests.
  */
-function estimateVP8LCost(data: Uint8Array): number {
+function estimateVP8LCost(data: Uint8Array, width: number): number {
   const hist = new Uint32Array(256);
+  const w4 = 4 * width;
   let literals = 0;
+  let matches = 0;
+  let streak = 0;
+  const flush = (): void => {
+    if (streak >= 4) matches++;
+    else literals += streak;
+    streak = 0;
+  };
   for (let i = 0; i < data.length; i++) {
-    if (i > 0 && data[i] === data[i - 1]) continue;
-    hist[data[i]]++;
+    const v = data[i];
+    if (
+      (i >= 1 && v === data[i - 1]) ||
+      (i >= width && v === data[i - width]) ||
+      (i >= w4 && v === data[i - w4])
+    ) {
+      streak++;
+      continue;
+    }
+    flush();
+    hist[v]++;
     literals++;
   }
-  if (literals === 0) return 0;
+  flush();
+  if (literals === 0 && matches === 0) return 0;
   let h = 0;
   for (let s = 0; s < 256; s++) {
     if (hist[s] === 0) continue;
-    const p = hist[s] / literals;
+    const p = hist[s] / Math.max(1, literals);
     h -= p * Math.log2(p);
   }
   // ~2 bits floor per literal for tree/token overhead keeps degenerate
   // single-symbol planes from all scoring identically at zero
-  return literals * (h + 2);
+  return literals * (h + 2) + matches * 16;
 }
 
 export interface AlphaEncodeResult {
@@ -237,7 +300,7 @@ export function encodeAlphaMethod0(
   alpha: Uint8Array,
   width: number,
   height: number,
-  levels: AlphaLevels = 16,
+  levels: AlphaLevels = DEFAULT_ALPHA_LEVELS,
   dither = 1,
 ): AlphaEncodeResult {
   const quantized = quantizeAlpha(alpha, width, levels, dither);
@@ -277,7 +340,7 @@ export function encodeAlpha(
   alpha: Uint8Array,
   width: number,
   height: number,
-  levels: AlphaLevels = 16,
+  levels: AlphaLevels = DEFAULT_ALPHA_LEVELS,
   dither = 1,
   adaptive = true,
 ): AlphaEncodeResult {
@@ -299,6 +362,51 @@ export function encodeAlpha(
         { plane: alpha, preprocessing: 0 },
         { plane: quantized, preprocessing: 1 /* level reduction, informational */ },
       ];
+  // 2-D dithering hides banding but can defeat LZ77 outright on smooth
+  // gradient planes. Rescue candidate: a 1-D dither aligned with the
+  // gradient axis — rows (or columns) stay identical, so it compresses like
+  // an undithered plane while still breaking up the bands. Offered only when
+  // the plane is essentially one-dimensional: the mean profile across the
+  // perpendicular axis must stay within half a quantization step, or the
+  // pattern would leave banding it cannot fix (e.g. radial fades). Never an
+  // undithered candidate — smooth gradients are where it compresses best and
+  // bands worst; dithering is a quality contract, not a size heuristic.
+  if (!isLossless && dither > 0) {
+    // Axis from the row/column mean profiles — averaging first cancels pixel
+    // noise that would otherwise swamp a gentle ramp.
+    const height = alpha.length / width;
+    const colMean = new Float64Array(width);
+    const rowMean = new Float64Array(height);
+    for (let i = 0; i < alpha.length; i++) {
+      colMean[i % width] += alpha[i];
+      rowMean[(i / width) | 0] += alpha[i];
+    }
+    const range = (p: Float64Array, n: number): number => {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (const v of p) {
+        const m = v / n;
+        if (m < lo) lo = m;
+        if (m > hi) hi = m;
+      }
+      return hi - lo;
+    };
+    const xRange = range(colMean, height);
+    const yRange = range(rowMean, width);
+    const pattern: DitherPattern = xRange >= yRange ? "x" : "y";
+    const perp = pattern === "x" ? yRange : xRange;
+    if (perp <= 255 / (levels - 1) / 2) {
+      const lin = adaptive
+        ? quantizeAlphaAdaptive(alpha, width, levels, dither, pattern)
+        : quantizeAlpha(alpha, width, levels, dither, pattern);
+      for (let i = 0; i < lin.length; i++) {
+        if (lin[i] !== quantized[i]) {
+          candidates.push({ plane: lin, preprocessing: 1 });
+          break;
+        }
+      }
+    }
+  }
 
   let bestPayload: Uint8Array | null = null;
   let bestFilter = FILTER_NONE;
@@ -308,19 +416,25 @@ export function encodeAlpha(
     // only the best two — halves the VP8L passes vs a full 4-filter search
     const ranked = [FILTER_NONE, FILTER_HORIZONTAL, FILTER_VERTICAL, FILTER_GRADIENT]
       .map((f) => ({ f, filtered: applyAlphaFilter(plane, width, height, f) }))
-      .map((c) => ({ ...c, h: estimateVP8LCost(c.filtered) }))
+      .map((c) => ({ ...c, h: estimateVP8LCost(c.filtered, width) }))
       .sort((a, b) => a.h - b.h)
       .slice(0, 2);
+    let candStream: Uint8Array | null = null;
+    let candFilter = FILTER_NONE;
     for (const { f, filtered } of ranked) {
       const stream = encodeAlphaVP8L(filtered, width, height);
-      if (bestPayload === null || stream.length + 1 < bestPayload.length) {
-        const payload = new Uint8Array(1 + stream.length);
-        payload[0] = 1 /* method 1 */ | (f << 2) | (preprocessing << 4);
-        payload.set(stream, 1);
-        bestPayload = payload;
-        bestFilter = f;
-        bestPlane = plane;
+      if (candStream === null || stream.length < candStream.length) {
+        candStream = stream;
+        candFilter = f;
       }
+    }
+    if (bestPayload === null || candStream!.length + 1 < bestPayload.length) {
+      const payload = new Uint8Array(1 + candStream!.length);
+      payload[0] = 1 /* method 1 */ | (candFilter << 2) | (preprocessing << 4);
+      payload.set(candStream!, 1);
+      bestPayload = payload;
+      bestFilter = candFilter;
+      bestPlane = plane;
     }
   }
   // Method-0 fallback: an uncompressed payload is always exactly

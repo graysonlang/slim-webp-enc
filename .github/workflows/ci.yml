@@ -20,3 +20,17 @@ jobs:
       - run: node harness/run.ts --encoder=slim
       - run: node harness/alpha-roundtrip.ts
       - run: npm run size # 55 KB minified hard gate
+
+  # Deploy test: pack the exact publish artifact, install it into a clean
+  # consumer project, and verify imports/encoding/validation/types plus
+  # decoder acceptance of the output (scripts/pack-test.mjs).
+  deploy-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: sudo apt-get update && sudo apt-get install -y webp
+      - run: npm ci
+      - run: node scripts/pack-test.mjs

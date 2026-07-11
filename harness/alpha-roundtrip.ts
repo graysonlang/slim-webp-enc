@@ -32,8 +32,9 @@ for (const img of images) {
 
   const problems: string[] = [];
   // default-config encode; enc.quantized is the plane a decoder must
-  // reproduce exactly (encodeWebP below uses the same defaults)
-  const enc = encodeAlpha(alpha, src.width, src.height, 16);
+  // reproduce exactly. No explicit levels: the signature default IS the API
+  // default (DEFAULT_ALPHA_LEVELS), so this cannot drift from encodeWebP.
+  const enc = encodeAlpha(alpha, src.width, src.height);
   const method = enc.payload[0] & 3;
   const quantized = enc.quantized;
 

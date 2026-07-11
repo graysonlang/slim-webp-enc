@@ -137,7 +137,8 @@ async function blobPreview(blob, w, h) {
 
 const state = {
   quality: 80,
-  alphaLevels: 16,
+  effort: 'quality',
+  alphaLevels: 32,
   alphaDither: 1,
   alphaAdaptive: true,
   sources: [], // [{ name, canvas, bytes }]
@@ -149,6 +150,7 @@ async function encodeSlim(source) {
   const t0 = performance.now();
   const webp = encodeWebP({ data: src.data, width, height }, {
     quality: state.quality,
+    effort: state.effort,
     alphaLevels: state.alphaLevels,
     alphaDither: state.alphaDither,
     alphaAdaptive: state.alphaAdaptive,
@@ -270,6 +272,11 @@ function wireControls() {
     renderAll();
   });
 
+  document.getElementById('effort').addEventListener('change', (e) => {
+    state.effort = e.target.value;
+    renderAll();
+  });
+
   document.getElementById('alpha-levels').addEventListener('change', (e) => {
     state.alphaLevels = Number(e.target.value);
     renderAll();
@@ -285,12 +292,69 @@ function wireControls() {
     renderAll();
   });
 
+  // Page theme: npm-style tri-state (light / system / dark). "System" is the
+  // stored-nothing state — the CSS cascade follows prefers-color-scheme,
+  // including live OS changes; an explicit light/dark choice is stored and
+  // wins. The head script applies a saved choice pre-paint.
+  const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  const effectiveTheme = () => {
+    const attr = document.documentElement.getAttribute('data-theme');
+    if (attr === 'light' || attr === 'dark') return attr;
+    return darkQuery.matches ? 'dark' : 'light';
+  };
+
+  // Checkerboard: follows the effective page theme; a manual toggle flips it
+  // within the current theme, and any theme switch snaps it back to matching
+  // the new theme.
   const checkerLabel = document.getElementById('checker-label');
+  const effectiveChecker = () => {
+    if (document.body.classList.contains('checker-light')) return 'light';
+    if (document.body.classList.contains('checker-dark')) return 'dark';
+    return effectiveTheme();
+  };
+  const updateCheckerLabel = () => {
+    checkerLabel.textContent = effectiveChecker();
+  };
   const toggleChecker = () => {
-    const light = document.body.classList.toggle('checker-light');
-    checkerLabel.textContent = light ? 'light' : 'dark';
+    const next = effectiveChecker() === 'light' ? 'dark' : 'light';
+    document.body.classList.toggle('checker-light', next === 'light');
+    document.body.classList.toggle('checker-dark', next === 'dark');
+    updateCheckerLabel();
   };
   document.getElementById('checker-toggle').addEventListener('click', toggleChecker);
+  const resetChecker = () => {
+    document.body.classList.remove('checker-light', 'checker-dark');
+  };
+
+  const segButtons = [...document.querySelectorAll('.theme-seg .icon-btn')];
+  const themeMode = () => {
+    let stored = null;
+    try { stored = localStorage.getItem('slim-webp-theme'); } catch { /* private mode, etc. */ }
+    return stored === 'light' || stored === 'dark' ? stored : 'system';
+  };
+  const renderTheme = () => {
+    const mode = themeMode();
+    for (const b of segButtons) b.classList.toggle('active', b.dataset.mode === mode);
+    updateCheckerLabel();
+  };
+  for (const b of segButtons) {
+    b.addEventListener('click', () => {
+      const mode = b.dataset.mode;
+      try {
+        if (mode === 'system') localStorage.removeItem('slim-webp-theme');
+        else localStorage.setItem('slim-webp-theme', mode);
+      } catch { /* private mode, etc. */ }
+      if (mode === 'system') document.documentElement.removeAttribute('data-theme');
+      else document.documentElement.setAttribute('data-theme', mode);
+      resetChecker(); // checkerboard snaps back to matching the new theme
+      renderTheme();
+    });
+  }
+  darkQuery.addEventListener('change', () => { // system mode tracks the OS
+    resetChecker();
+    renderTheme();
+  });
+  renderTheme();
 
   const input = document.getElementById('file-input');
   document.getElementById('upload-btn').addEventListener('click', () => input.click());
@@ -324,6 +388,15 @@ async function main() {
     ...createSampleSuite(host).build(),
     ...createFinehashSuite(host)(),
   ];
+  // group the slow-alpha-gradient cases: fade (the ar_background pathology)
+  // directly under alpha-radial, and alpha-ramp under fade
+  const pull = (name) => {
+    const i = samples.findIndex((s) => s.name === name);
+    return i >= 0 ? samples.splice(i, 1)[0] : null;
+  };
+  const gradientTrio = [pull('fade'), pull('alpha-ramp')].filter(Boolean);
+  const radialAt = samples.findIndex((s) => s.name === 'alpha-radial.png');
+  samples.splice(radialAt + 1, 0, ...gradientTrio);
   for (const { name, canvas } of samples) {
     // PNG size as the "original bytes" reference for procedural samples
     const png = await canvasToBlob(canvas, 'image/png');
